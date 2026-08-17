@@ -1,0 +1,62 @@
+using Hangfire;
+using Hangfire.PostgreSql;
+using Microsoft.EntityFrameworkCore;
+using NexusVault.Application.Interfaces;
+using NexusVault.Application.Services;
+using NexusVault.Infrastructure;
+using NexusVault.Infrastructure.Jobs;
+using NexusVault.Infrastructure.Persistence;
+using NexusVault.Infrastructure.Persistence.Repositories;
+using NexusVault.Infrastructure.TextExtraction;
+
+var builder = WebApplication.CreateBuilder(args);
+
+// Add services to the container.
+
+builder.Services.AddControllers();
+// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
+builder.Services.AddSwaggerGen();
+
+var connectionString = builder.Configuration.GetConnectionString("Postgres")
+    ?? throw new InvalidOperationException("ConnectionStrings:Postgres is not configured.");
+
+builder.Services.AddDbContext<NexusVaultDbContext>(options =>
+    options.UseNpgsql(connectionString));
+
+builder.Services.AddScoped<IDocumentRepository, DocumentRepository>();
+
+var storageRoot = builder.Configuration["Storage:LocalRootPath"] ?? "/data/nexusvault-files";
+builder.Services.AddSingleton<IFileStorage>(new LocalFileStorage(storageRoot));
+
+builder.Services.AddScoped<ITextExtractor, PdfTextExtractor>();
+builder.Services.AddScoped<ITextExtractor, DocxTextExtractor>();
+builder.Services.AddScoped<TextExtractorResolver>();
+
+builder.Services.AddScoped<DocumentIngestionService>();
+
+// --- Background jobs (Hangfire, backed by Postgres -- no separate broker) ----
+builder.Services.AddHangfire(config => config
+    .UsePostgreSqlStorage(options => options.UseNpgsqlConnection(connectionString)));
+builder.Services.AddHangfireServer();
+
+builder.Services.AddScoped<IIngestionJobScheduler, HangfireIngestionJobScheduler>();
+builder.Services.AddScoped<ProcessDocumentVersionJob>();
+
+
+var app = builder.Build();
+
+// Configure the HTTP request pipeline.
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+    app.UseHangfireDashboard("/hangfire");
+}
+
+app.UseHttpsRedirection();
+
+app.UseAuthorization();
+
+app.MapControllers();
+
+app.Run();

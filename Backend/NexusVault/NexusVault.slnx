@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="NexusVault.Api/NexusVault.Api.csproj" />
+  <Project Path="NexusVault.Application/NexusVault.Application.csproj" />
+  <Project Path="NexusVault.Domain/NexusVault.Domain.csproj" />
+  <Project Path="NexusVault.Infrastructure/NexusVault.Infrastructure.csproj" />
+</Solution>
