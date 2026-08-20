@@ -1,6 +1,7 @@
 ﻿using Hangfire;
 using Microsoft.Extensions.Logging;
 using NexusVault.Application.Interfaces;
+using NexusVault.Application.Services;
 using NexusVault.Domain.Entities;
 using NexusVault.Domain.Enums;
 using NexusVault.Infrastructure.Persistence;
@@ -11,19 +12,6 @@ using System.Text;
 
 namespace NexusVault.Infrastructure.Jobs
 {
-    /// <summary>
-    /// Phase 1's entire background pipeline: Pending -> Processing -> extract
-    /// text -> Ready (or Failed). This is deliberately the ONLY step for now --
-    /// Phase 2 extends this same job (or chains a new one after it) with
-    /// chunking and embedding, rather than this being rewritten wholesale.
-    ///
-    /// Retry policy: [AutomaticRetry] is Hangfire's built-in exponential-backoff
-    /// retry. attemptsMax is intentionally modest (3) -- extraction failures are
-    /// usually deterministic (corrupt file, unsupported encoding), so hammering
-    /// retries rarely helps; what matters is that a transient failure (e.g. a
-    /// momentary disk I/O issue) gets a couple of chances before landing in
-    /// Failed for manual inspection.
-    /// </summary>
 
     [AutomaticRetry(Attempts = 3, DelaysInSeconds = new[] { 10, 60, 300 }, OnAttemptsExceeded = AttemptsExceededAction.Fail)]
     public class ProcessDocumentVersionJob
@@ -31,38 +19,43 @@ namespace NexusVault.Infrastructure.Jobs
         private readonly NexusVaultDbContext _db;
         private readonly IFileStorage _fileStorage;
         private readonly TextExtractorResolver _extractorResolver;
+        private readonly IChunkingService _chunkingService;
+        private readonly IEmbeddingService _embeddingService;
         private readonly ILogger<ProcessDocumentVersionJob> _logger;
 
         public ProcessDocumentVersionJob(
             NexusVaultDbContext db,
             IFileStorage fileStorage,
             TextExtractorResolver extractorResolver,
+            IChunkingService chunkingService,
+            IEmbeddingService embeddingService,
             ILogger<ProcessDocumentVersionJob> logger)
         {
             _db = db;
             _fileStorage = fileStorage;
             _extractorResolver = extractorResolver;
+            _chunkingService = chunkingService;
+            _embeddingService = embeddingService;
             _logger = logger;
         }
 
         public async Task ExecuteAsync(Guid documentVersionId, string correlationId, CancellationToken ct)
         {
-            // correlationId flows into every log line for this run -- this is
-            // what lets you reconstruct one document's full processing history
-            // from logs alone, and it's the same id that will be forwarded as a
-            // header to FastAPI once Phase 2 adds calls out to the AI service.
-            using var scope = _logger.BeginScope(new Dictionary<string, object> { ["CorrelationId"] = correlationId });
+
+            using var scope = _logger.BeginScope(new Dictionary<string, object>
+            {
+                ["CorrelationId"] = correlationId,
+                ["DocumentVersionId"] = documentVersionId
+            });
 
             var version = await _db.DocumentVersions.FindAsync(new object?[] { documentVersionId }, ct);
             if (version is null)
             {
-                _logger.LogWarning("DocumentVersion {VersionId} not found -- skipping (likely deleted before job ran)", documentVersionId);
+                _logger.LogWarning("DocumentVersion {VersionId} not found -- skipping", documentVersionId);
                 return;
             }
 
-            // Idempotency guard: if this exact version already has extracted
-            // text and is already Ready, a retried/duplicate job run should be a
-            // safe no-op rather than redoing work or throwing.
+            // Idempotency guard: already fully processed, skip safely
             var alreadyProcessed = await _db.DocumentTexts.FindAsync(new object?[] { documentVersionId }, ct);
             if (alreadyProcessed is not null && version.Status == DocumentVersionStatus.Ready)
             {
@@ -77,19 +70,14 @@ namespace NexusVault.Infrastructure.Jobs
 
             try
             {
+                // Step 1: Text extraction
                 await using var fileStream = await _fileStorage.OpenReadAsync(version.StoragePath, ct);
                 var extractor = _extractorResolver.Resolve(version.ContentType);
-                var result = await extractor.ExtractAsync(fileStream, ct);
+                var extractionResult = await extractor.ExtractAsync(fileStream, ct);
 
-                if (string.IsNullOrWhiteSpace(result.Text))
-                {
-                    // Not an exception -- a PDF with no text layer (scanned
-                    // images) is a valid, expected outcome, not a bug. Flag it
-                    // as Failed with a clear reason rather than silently
-                    // "succeeding" with an empty, unsearchable document.
+                if (string.IsNullOrWhiteSpace(extractionResult.Text))
                     throw new InvalidOperationException(
                         "Extraction produced no text. The file may be a scanned/image-only document -- OCR is not yet supported.");
-                }
 
                 var existingText = await _db.DocumentTexts.FindAsync(new object?[] { documentVersionId }, ct);
                 if (existingText is null)
@@ -97,29 +85,81 @@ namespace NexusVault.Infrastructure.Jobs
                     _db.DocumentTexts.Add(new DocumentText
                     {
                         DocumentVersionId = documentVersionId,
-                        Content = result.Text,
-                        ExtractionMethod = result.Method,
-                        PageCount = result.PageCount,
+                        Content = extractionResult.Text,
+                        ExtractionMethod = extractionResult.Method,
+                        PageCount = extractionResult.PageCount,
                         ExtractedAt = DateTimeOffset.UtcNow
                     });
                 }
                 else
                 {
-                    existingText.Content = result.Text;
-                    existingText.ExtractionMethod = result.Method;
-                    existingText.PageCount = result.PageCount;
+                    existingText.Content = extractionResult.Text;
+                    existingText.ExtractionMethod = extractionResult.Method;
+                    existingText.PageCount = extractionResult.PageCount;
                     existingText.ExtractedAt = DateTimeOffset.UtcNow;
                 }
 
-                version.Status = DocumentVersionStatus.Ready;
-                version.ReadyAt = DateTimeOffset.UtcNow;
-                version.ErrorMessage = null;
+                await _db.SaveChangesAsync(ct);
+                _logger.LogInformation("Extraction complete: {CharCount} chars via {Method}",
+                    extractionResult.Text.Length, extractionResult.Method);
+
+                // Step 2: Chunking
+                var chunks = await _chunkingService.ChunkAsync(extractionResult.Text, ct: ct);
+                _logger.LogInformation("Chunking complete: {ChunkCount} chunks", chunks.Count);
+
+                // Step 3: Embedding
+                var chunkTexts = chunks.Select(c => c.Text).ToList();
+                var embedResult = await _embeddingService.EmbedAsync(chunkTexts, ct);
+                _logger.LogInformation("Embedding complete: {Dims}-dim vectors via {Model}",
+                    embedResult.Dimensions, embedResult.ModelName);
+
+                // Step 4: Persist chunks + embeddings
+                // Remove existing chunks for idempotency on retry -- safe because
+                // the unique index on (DocumentVersionId, ChunkIndex) would reject
+                var existingChunks = _db.Chunks.Where(c => c.DocumentVersionId == documentVersionId);
+                _db.Chunks.RemoveRange(existingChunks);
+                await _db.SaveChangesAsync(ct);
+
+                for (var i = 0; i < chunks.Count; i++)
+                {
+                    var chunk = chunks[i];
+                    var vector = embedResult.Vectors[i];
+
+                    var chunkEntity = new Chunk
+                    {
+                        Id = Guid.NewGuid(),
+                        DocumentVersionId = documentVersionId,
+                        TenantId = version.TenantId,
+                        ChunkIndex = chunk.ChunkIndex,
+                        Text = chunk.Text,
+                        PageNumber = chunk.PageNumber,
+                        SectionHeading = chunk.SectionHeading,
+                        ContentHash = ContentHasher.ComputeSha256(chunk.Text),
+                        CreatedAt = DateTimeOffset.UtcNow,
+                        Embedding = new Embedding
+                        {
+                            Vector = vector,
+                            ModelName = embedResult.ModelName,
+                            ModelVersion = embedResult.ModelVersion,
+                            Dimensions = embedResult.Dimensions,
+                            CreatedAt = DateTimeOffset.UtcNow
+                        }
+                    };
+
+                    _db.Chunks.Add(chunkEntity);
+                }
 
                 await _db.SaveChangesAsync(ct);
 
-                _logger.LogInformation(
-                    "DocumentVersion {VersionId} extracted successfully via {Method} ({CharCount} chars)",
-                    documentVersionId, result.Method, result.Text.Length);
+                // Step 5: Mark ready
+                version.Status = DocumentVersionStatus.Ready;
+                version.ReadyAt = DateTimeOffset.UtcNow;
+                version.ErrorMessage = null;
+                await _db.SaveChangesAsync(ct);
+
+                _logger.LogInformation("DocumentVersion {VersionId} fully processed: {ChunkCount} chunks indexed",
+                    documentVersionId, chunks.Count);
+
             }
             catch (Exception ex)
             {

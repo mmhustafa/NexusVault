@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using NexusVault.Application.Interfaces;
 using NexusVault.Application.Services;
 using NexusVault.Infrastructure;
+using NexusVault.Infrastructure.AiService;
 using NexusVault.Infrastructure.Jobs;
 using NexusVault.Infrastructure.Persistence;
 using NexusVault.Infrastructure.Persistence.Repositories;
@@ -21,7 +22,7 @@ var connectionString = builder.Configuration.GetConnectionString("Postgres")
     ?? throw new InvalidOperationException("ConnectionStrings:Postgres is not configured.");
 
 builder.Services.AddDbContext<NexusVaultDbContext>(options =>
-    options.UseNpgsql(connectionString));
+    options.UseNpgsql(connectionString, npgsqlOptions => npgsqlOptions.UseVector()));
 
 builder.Services.AddScoped<IDocumentRepository, DocumentRepository>();
 
@@ -31,6 +32,22 @@ builder.Services.AddSingleton<IFileStorage>(new LocalFileStorage(storageRoot));
 builder.Services.AddScoped<ITextExtractor, PdfTextExtractor>();
 builder.Services.AddScoped<ITextExtractor, DocxTextExtractor>();
 builder.Services.AddScoped<TextExtractorResolver>();
+
+var aiServiceBaseUrl = builder.Configuration["AiService:BaseUrl"]
+    ?? throw new InvalidOperationException("AiService:BaseUrl is not configured.");
+var aiServiceTimeoutSeconds = builder.Configuration.GetValue("AiService:TimeoutSeconds", 120);
+
+builder.Services.AddHttpClient<IChunkingService, HttpChunkingService>(client =>
+{
+    client.BaseAddress = new Uri(aiServiceBaseUrl);
+    client.Timeout = TimeSpan.FromSeconds(aiServiceTimeoutSeconds);
+});
+
+builder.Services.AddHttpClient<IEmbeddingService, HttpEmbeddingService>(client =>
+{
+    client.BaseAddress = new Uri(aiServiceBaseUrl);
+    client.Timeout = TimeSpan.FromSeconds(aiServiceTimeoutSeconds);
+});
 
 builder.Services.AddScoped<DocumentIngestionService>();
 

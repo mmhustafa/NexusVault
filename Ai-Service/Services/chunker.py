@@ -49,6 +49,7 @@ def chunk_text(text: str, max_tokens_per_chunk: int = 300) -> list[ChunkItem]:
 
     for block in raw_blocks:
         if block == "\f":
+            flush()
             current_page += 1
             continue
         if not block or block.strip() == "" or re.fullmatch(r"\n\s*\n", block):

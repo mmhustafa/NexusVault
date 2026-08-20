@@ -15,9 +15,13 @@ namespace NexusVault.Infrastructure.Persistence
         public DbSet<Domain.Entities.Document> Documents => Set<Domain.Entities.Document>();
         public DbSet<DocumentVersion> DocumentVersions => Set<DocumentVersion>();
         public DbSet<DocumentText> DocumentTexts => Set<DocumentText>();
+        public DbSet<Chunk> Chunks => Set<Chunk>();
+        public DbSet<Embedding> Embeddings => Set<Embedding>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
+            modelBuilder.HasPostgresExtension("vector");
+
             modelBuilder.ApplyConfigurationsFromAssembly(typeof(NexusVaultDbContext).Assembly);
             base.OnModelCreating(modelBuilder);
         }

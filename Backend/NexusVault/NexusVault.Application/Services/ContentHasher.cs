@@ -14,5 +14,10 @@ namespace NexusVault.Application.Services
             stream.Position = 0; // caller will likely need to read the stream again (storage, extraction)
             return Convert.ToHexString(hashBytes).ToLowerInvariant();
         }
+        public static string ComputeSha256(string text)
+        {
+            var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(text));
+            return Convert.ToHexString(bytes).ToLowerInvariant();
+        }
     }
 }

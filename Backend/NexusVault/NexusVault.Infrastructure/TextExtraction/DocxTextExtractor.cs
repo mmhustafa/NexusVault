@@ -27,8 +27,11 @@ namespace NexusVault.Infrastructure.TextExtraction
                 {
                     ct.ThrowIfCancellationRequested();
                     var text = paragraph.InnerText;
-                    if (!string.IsNullOrWhiteSpace(text))
-                        sb.AppendLine(text);
+
+                    if (string.IsNullOrWhiteSpace(text)) continue;
+
+                    sb.AppendLine(text.Trim());
+                    sb.AppendLine(); // explicit paragraph boundary -- matches PdfTextExtractor's convention
                 }
             }
 
