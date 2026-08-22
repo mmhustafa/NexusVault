@@ -9,12 +9,15 @@ using NexusVault.Infrastructure.Jobs;
 using NexusVault.Infrastructure.Persistence;
 using NexusVault.Infrastructure.Persistence.Repositories;
 using NexusVault.Infrastructure.TextExtraction;
+using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
-builder.Services.AddControllers();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddSwaggerGen();
 
@@ -25,6 +28,7 @@ builder.Services.AddDbContext<NexusVaultDbContext>(options =>
     options.UseNpgsql(connectionString, npgsqlOptions => npgsqlOptions.UseVector()));
 
 builder.Services.AddScoped<IDocumentRepository, DocumentRepository>();
+builder.Services.AddScoped<IChunkSearchRepository, ChunkSearchRepository>();
 
 var storageRoot = builder.Configuration["Storage:LocalRootPath"] ?? "/data/nexusvault-files";
 builder.Services.AddSingleton<IFileStorage>(new LocalFileStorage(storageRoot));
@@ -50,6 +54,7 @@ builder.Services.AddHttpClient<IEmbeddingService, HttpEmbeddingService>(client =
 });
 
 builder.Services.AddScoped<DocumentIngestionService>();
+builder.Services.AddScoped<SearchService>();
 
 // --- Background jobs (Hangfire, backed by Postgres -- no separate broker) ----
 builder.Services.AddHangfire(config => config
