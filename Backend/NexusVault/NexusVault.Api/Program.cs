@@ -53,6 +53,12 @@ builder.Services.AddHttpClient<IEmbeddingService, HttpEmbeddingService>(client =
     client.Timeout = TimeSpan.FromSeconds(aiServiceTimeoutSeconds);
 });
 
+builder.Services.AddHttpClient<IRerankingService, HttpRerankingService>(client =>
+{
+    client.BaseAddress = new Uri(aiServiceBaseUrl);
+    client.Timeout = TimeSpan.FromSeconds(aiServiceTimeoutSeconds);
+});
+
 builder.Services.AddScoped<DocumentIngestionService>();
 builder.Services.AddScoped<SearchService>();
 

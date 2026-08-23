@@ -26,3 +26,22 @@ class EmbedResponse(BaseModel):
     model_name: str
     model_version: str
     dimensions: int
+
+
+class RerankCandidate(BaseModel):
+    id: str
+    text: str
+
+
+class RerankRequest(BaseModel):
+    query: str
+    candidates: list[RerankCandidate] = Field(..., min_length=1)
+
+
+class RerankedItem(BaseModel):
+    id: str
+    score: float
+
+
+class RerankResponse(BaseModel):
+    ranked: list[RerankedItem]

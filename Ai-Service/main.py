@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 
-from Routers import chunking, embedding
+from Routers import chunking, embedding, reranking
 
 app = FastAPI(
     title="NexusVault AI Service",
@@ -10,6 +10,7 @@ app = FastAPI(
 
 app.include_router(chunking.router)
 app.include_router(embedding.router)
+app.include_router(reranking.router)
 
 
 @app.get("/health")

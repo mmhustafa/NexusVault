@@ -27,7 +27,7 @@ namespace NexusVault.Api.Controllers
             try
             {
                 var results = await _searchService.SearchAsync(
-                    request.Query, tenantId, request.TopK, request.DocumentId, request.Mode, request.Fusion, ct);
+                    request.Query, tenantId, request.TopK, request.DocumentId, request.Mode, request.Fusion, request.Rerank, ct);
                 return Ok(results);
             }
             catch (InvalidOperationException ex)

@@ -1,7 +1,9 @@
-﻿using NexusVault.Application.DTOs;
+﻿using Microsoft.Extensions.Logging;
+using NexusVault.Application.DTOs;
 using NexusVault.Application.Interfaces;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Text;
 
 namespace NexusVault.Application.Services
@@ -12,13 +14,20 @@ namespace NexusVault.Application.Services
         private const int MaxTopK = 20;
         private const int RrfK = 60;
 
+        private const int RerankPoolMultiplier = 5;
+        private const int MinRerankPoolSize = 20;
+
         private readonly IEmbeddingService _embeddingService;
         private readonly IChunkSearchRepository _searchRepository;
+        private readonly IRerankingService _rerankingService;
+        private readonly ILogger<SearchService> _logger;
 
-        public SearchService(IEmbeddingService embeddingService, IChunkSearchRepository searchRepository)
+        public SearchService(IEmbeddingService embeddingService, IChunkSearchRepository searchRepository, IRerankingService rerankingService, ILogger<SearchService> logger)
         {
             _embeddingService = embeddingService;
             _searchRepository = searchRepository;
+            _rerankingService = rerankingService;
+            _logger = logger;
         }
 
         public async Task<IReadOnlyList<SearchResultDto>> SearchAsync(
@@ -28,6 +37,7 @@ namespace NexusVault.Application.Services
             Guid? documentId = null,
             SearchMode mode = SearchMode.Dense,
             FusionStrategy fusion = FusionStrategy.Rrf,
+            bool rerank = false,
             CancellationToken ct = default)
         {
 
@@ -35,15 +45,54 @@ namespace NexusVault.Application.Services
                 throw new InvalidOperationException("Query text is required.");
 
             var effectiveTopK = Math.Clamp(topK ?? DefaultTopK, 1, MaxTopK);
+            var retrievalPoolSize = rerank
+                ? Math.Max(effectiveTopK * RerankPoolMultiplier, MinRerankPoolSize)
+                : effectiveTopK;
 
-            return mode switch
+            var retrievalStopwatch = Stopwatch.StartNew();
+
+            var candidates = mode switch
             {
-                SearchMode.Sparse => await SearchSparseAsync(query, tenantId, effectiveTopK, documentId, ct),
-                SearchMode.Hybrid => await SearchHybridAsync(query, tenantId, effectiveTopK, documentId, fusion, ct),
-                _ => await SearchDenseAsync(query, tenantId, effectiveTopK, documentId, ct)
+                SearchMode.Sparse => await SearchSparseAsync(query, tenantId, retrievalPoolSize, documentId, ct),
+                SearchMode.Hybrid => await SearchHybridAsync(query, tenantId, retrievalPoolSize, documentId, fusion, ct),
+                _ => await SearchDenseAsync(query, tenantId, retrievalPoolSize, documentId, ct)
             };
+
+            retrievalStopwatch.Stop();
+            _logger.LogInformation(
+                "Retrieval ({Mode}, pool={PoolSize}) took {ElapsedMs}ms, {CandidateCount} candidates",
+                mode, retrievalPoolSize, retrievalStopwatch.ElapsedMilliseconds, candidates.Count);
+
+            if (!rerank || candidates.Count == 0)
+                return candidates.Take(effectiveTopK).ToList();
+
+            var rerankStopwatch = Stopwatch.StartNew();
+            var result = await RerankResultsAsync(query, candidates, effectiveTopK, ct);
+            rerankStopwatch.Stop();
+
+            _logger.LogInformation(
+                "Reranking took {ElapsedMs}ms for {CandidateCount} candidates",
+                rerankStopwatch.ElapsedMilliseconds, candidates.Count);
+
+            return result;
         }
 
+        private async Task<IReadOnlyList<SearchResultDto>> RerankResultsAsync(
+        string query, IReadOnlyList<SearchResultDto> candidates, int topK, CancellationToken ct)
+        {
+            var rerankCandidates = candidates
+                .Select(c => new RerankCandidate(c.ChunkId, c.Text))
+                .ToList();
+
+            var reranked = await _rerankingService.RerankAsync(query, rerankCandidates, ct);
+            var byId = candidates.ToDictionary(c => c.ChunkId);
+
+            return reranked
+                .OrderByDescending(r => r.Score)
+                .Take(topK)
+                .Select(r => byId[r.Id] with { Score = r.Score }) // cross-encoder score replaces the retrieval score
+                .ToList();
+        }
         private async Task<IReadOnlyList<SearchResultDto>> SearchDenseAsync(
             string query, Guid tenantId, int topK, Guid? documentId, CancellationToken ct)
         {
@@ -125,8 +174,8 @@ namespace NexusVault.Application.Services
         private static List<SearchResultDto> FuseWithWeightedSum(
             IReadOnlyList<ChunkSearchResult> denseResults,
             IReadOnlyList<ChunkFullTextResult> sparseResults,
-        int topK,
-        double alpha = 0.5)
+            int topK,
+            double alpha = 0.5)
         {
             var denseRaw = denseResults.ToDictionary(r => r.ChunkId, r => 1 - r.Distance);
             var sparseRaw = sparseResults.ToDictionary(r => r.ChunkId, r => r.Rank);
@@ -156,7 +205,7 @@ namespace NexusVault.Application.Services
             var max = raw.Values.Max();
 
             if (Math.Abs(max - min) < 1e-9)
-                return raw.ToDictionary(kv => kv.Key, _ => 1.0); // all equal -- avoid divide-by-zero
+                return raw.ToDictionary(kv => kv.Key, _ => 1.0); 
 
             return raw.ToDictionary(kv => kv.Key, kv => (kv.Value - min) / (max - min));
         }
