@@ -59,8 +59,15 @@ builder.Services.AddHttpClient<IRerankingService, HttpRerankingService>(client =
     client.Timeout = TimeSpan.FromSeconds(aiServiceTimeoutSeconds);
 });
 
+builder.Services.AddHttpClient<IRagSynthesisService, HttpRagSynthesisService>(client =>
+{
+    client.BaseAddress = new Uri(aiServiceBaseUrl);
+    client.Timeout = TimeSpan.FromSeconds(aiServiceTimeoutSeconds);
+});
+
 builder.Services.AddScoped<DocumentIngestionService>();
 builder.Services.AddScoped<SearchService>();
+builder.Services.AddScoped<AskService>();
 
 // --- Background jobs (Hangfire, backed by Postgres -- no separate broker) ----
 builder.Services.AddHangfire(config => config

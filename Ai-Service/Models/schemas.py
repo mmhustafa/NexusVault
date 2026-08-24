@@ -45,3 +45,19 @@ class RerankedItem(BaseModel):
 
 class RerankResponse(BaseModel):
     ranked: list[RerankedItem]
+
+
+
+class RagChunk(BaseModel):
+    id: str
+    text: str
+
+
+class RagSynthesizeRequest(BaseModel):
+    query: str
+    chunks: list[RagChunk] = Field(..., min_length=1)
+
+
+class RagSynthesizeResponse(BaseModel):
+    answer: str
+    cited_chunk_ids: list[str]
