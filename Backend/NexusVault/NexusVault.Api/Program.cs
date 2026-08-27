@@ -1,14 +1,18 @@
 using Hangfire;
 using Hangfire.PostgreSql;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using NexusVault.Application.Interfaces;
 using NexusVault.Application.Services;
 using NexusVault.Infrastructure;
 using NexusVault.Infrastructure.AiService;
+using NexusVault.Infrastructure.Identity;
 using NexusVault.Infrastructure.Jobs;
 using NexusVault.Infrastructure.Persistence;
 using NexusVault.Infrastructure.Persistence.Repositories;
 using NexusVault.Infrastructure.TextExtraction;
+using System.Text;
 using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -29,6 +33,54 @@ builder.Services.AddDbContext<NexusVaultDbContext>(options =>
 
 builder.Services.AddScoped<IDocumentRepository, DocumentRepository>();
 builder.Services.AddScoped<IChunkSearchRepository, ChunkSearchRepository>();
+
+builder.Services.AddIdentityCore<ApplicationUser>(options =>
+{
+    options.Password.RequiredLength = 8;
+    options.Password.RequireNonAlphanumeric = false;
+    options.User.RequireUniqueEmail = true;
+})
+    .AddEntityFrameworkStores<NexusVaultDbContext>();
+
+builder.Services.AddScoped<ITokenService, JwtTokenService>();
+
+var jwtSecret = builder.Configuration["Jwt:Secret"]
+    ?? throw new InvalidOperationException("Jwt:Secret is not configured.");
+
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidIssuer = builder.Configuration["Jwt:Issuer"] ?? "NexusVault",
+            ValidateAudience = true,
+            ValidAudience = builder.Configuration["Jwt:Audience"] ?? "NexusVault",
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret)),
+            ValidateLifetime = true,
+            ClockSkew = TimeSpan.FromSeconds(30) 
+        };
+    });
+
+builder.Services.AddAuthorization(options =>
+{
+    // Every business endpoint (documents, search, ask, invitations) should
+    // require this policy -- it's what stops a narrow tenant-selection
+    // token (which has no tenant_id claim at all) from being usable
+    // anywhere except /api/auth/select-tenant. Retrofitted onto the
+    // existing controllers in the next stage.
+    options.AddPolicy("RequireTenantContext", policy =>
+        policy.RequireAuthenticatedUser().RequireClaim("tenant_id"));
+});
+
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ICurrentTenant, CurrentTenant>();
+builder.Services.AddScoped<IAuthService, AuthService>();
 
 var storageRoot = builder.Configuration["Storage:LocalRootPath"] ?? "/data/nexusvault-files";
 builder.Services.AddSingleton<IFileStorage>(new LocalFileStorage(storageRoot));
@@ -90,6 +142,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();

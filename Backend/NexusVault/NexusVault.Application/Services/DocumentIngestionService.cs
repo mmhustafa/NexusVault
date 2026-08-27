@@ -51,13 +51,6 @@ namespace NexusVault.Application.Services
 
             var contentHash = await ContentHasher.ComputeSha256Async(fileStream, ct);
 
-            // For Phase 1 (single implicit document per upload) we treat "document"
-            // identity as new-per-upload unless a caller explicitly targets an
-            // existing document for a new version -- that flow (explicit
-            // "upload version 2 of document X") is exercised properly in Phase 9.
-            // Idempotency here just prevents *this* exact upload from being
-            // reprocessed if retried by the client.
-
             var document = new Document
             {
                 Id = Guid.NewGuid(),
@@ -104,10 +97,11 @@ namespace NexusVault.Application.Services
 
             return new UploadDocumentResult(document.Id, version.Id, version.Status.ToString(), WasDuplicate: false);
         }
-        public async Task<DocumentVersionStatusResult?> GetStatusAsync(Guid documentVersionId, CancellationToken ct = default)
+        public async Task<DocumentVersionStatusResult?> GetStatusAsync(Guid documentVersionId,Guid tenantId, CancellationToken ct = default)
         {
             var version = await _repository.GetVersionAsync(documentVersionId, ct);
-            if (version is null) return null;
+
+            if (version is null || version.TenantId != tenantId) return null;
 
             return new DocumentVersionStatusResult(
                 version.Id,

@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using NexusVault.Application.DTOs;
+using NexusVault.Application.Interfaces;
 using NexusVault.Application.Services;
 
 namespace NexusVault.Api.Controllers
@@ -10,22 +11,21 @@ namespace NexusVault.Api.Controllers
     public class AskController : ControllerBase
     {
         private readonly AskService _askService;
+        private readonly ICurrentTenant _currentTenant;
 
-        public AskController(AskService askService)
+        public AskController(AskService askService, ICurrentTenant currentTenant)
         {
             _askService = askService;
+            _currentTenant = currentTenant;
         }
 
         [HttpPost]
         public async Task<IActionResult> Ask([FromBody] AskRequest request, CancellationToken ct)
         {
-            // TODO(Phase 8): replace with tenantId resolved from JWT claims,
-            // same placeholder pattern as every other controller so far.
-            var tenantId = Guid.Empty;
 
             try
             {
-                var result = await _askService.AskAsync(request.Query, tenantId, request.DocumentId, ct);
+                var result = await _askService.AskAsync(request.Query, _currentTenant.TenantId, request.DocumentId, ct);
                 return Ok(result);
             }
             catch (InvalidOperationException ex)
