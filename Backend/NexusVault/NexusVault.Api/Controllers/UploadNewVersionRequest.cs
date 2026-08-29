@@ -2,5 +2,6 @@
 {
     public class UploadNewVersionRequest
     {
+        public IFormFile File { get; set; } = null!;
     }
 }

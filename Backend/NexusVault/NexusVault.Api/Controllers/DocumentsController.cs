@@ -55,5 +55,43 @@ namespace NexusVault.Api.Controllers
             return status is null ? NotFound() : Ok(status);
         }
 
+        [HttpPost("{documentId:guid}/versions")]
+        [Authorize(Roles = TenantRoles.Admin)]
+        [Consumes("multipart/form-data")]
+        [RequestSizeLimit(25 * 1024 * 1024)]
+        public async Task<IActionResult> UploadNewVersion(Guid documentId, [FromForm] UploadNewVersionRequest request, CancellationToken ct)
+        {
+            if (request.File is null || request.File.Length == 0)
+                return BadRequest("A non-empty file is required.");
+
+            try
+            {
+                await using var stream = request.File.OpenReadStream();
+                var result = await _ingestionService.UploadNewVersionAsync(
+                    documentId, _currentTenant.TenantId,
+                    request.File.FileName, request.File.ContentType, request.File.Length, stream, ct);
+
+                return AcceptedAtAction(
+                    nameof(GetStatus),
+                    new { documentVersionId = result.DocumentVersionId },
+                    result);
+            }
+            catch (InvalidOperationException ex) when (ex.Message == "Document not found.")
+            {
+                return NotFound();
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        [HttpGet("{documentId:guid}/versions")]
+        public async Task<IActionResult> GetVersionHistory(Guid documentId, CancellationToken ct)
+        {
+            var history = await _ingestionService.GetVersionHistoryAsync(documentId, _currentTenant.TenantId, ct);
+            return history is null ? NotFound() : Ok(history);
+        }
+
     }
 }
