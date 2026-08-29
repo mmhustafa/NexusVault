@@ -4,38 +4,41 @@
 
 ## Overview
 
-Organizations accumulate huge volumes of internal documentation — policies, technical references, reports, manuals — that's technically searchable but practically opaque, because keyword search fails the moment a question doesn't match a document's exact wording. Someone searching *"remote work policy"* gets nothing useful if the actual document says *"employees may work from home up to three days per week."*
+Organizations accumulate large volumes of internal documentation such as policies, technical references, reports, and manuals. Traditional keyword search often fails when a user's query does not use the same wording as the document.
 
-NexusVault solves this properly: documents are ingested, understood, and indexed by *meaning*, not just words — so people can ask real questions in plain language and get accurate, cited answers grounded in their organization's own documents, not guesses from a general-purpose chatbot.
+For example, searching for *"remote work policy"* may not find a document stating that *"employees may work from home up to three days per week."*
+
+NexusVault solves this by indexing documents based on meaning rather than keywords alone. Users can search in natural language and receive accurate, grounded answers based on their organization's own documents, with traceable citations instead of unsupported guesses.
 
 ## Features
 
-### Document Ingestion
-Upload a PDF or Word document, and NexusVault automatically extracts the text, breaks it into meaningful pieces, and indexes it — all in the background, so uploading feels instant even though the real work takes a little time.
+| Feature | Description |
+|---|---|
+| **Document Ingestion** | Users can upload PDF and Word documents. NexusVault extracts text, divides it into meaningful chunks, generates searchable indexes, and processes the document in the background so uploads remain responsive. |
+| **Semantic Search** | Finds relevant content based on meaning rather than requiring exact keyword matches. Users can ask questions using their own wording. |
+| **Keyword Search** | Supports precise searches for exact terms, phrases, identifiers, and error codes where semantic search may not be sufficient. |
+| **Hybrid Search** | Combines semantic and keyword search to provide stronger results for different types of queries. |
+| **Relevance Reranking** | Performs a second-stage evaluation of the strongest search candidates to improve result ordering and ensure the most relevant passages appear first. |
+| **Grounded Question-Answering** | Generates natural-language answers based entirely on the organization's documents. Claims can be traced to their source document, page, and section. If the answer is not supported by the available documents, the system responds without guessing. |
+| **Workspaces** | Provides isolated private workspaces for organizations. Data is separated between workspaces, preventing one organization from accessing another's documents. Users can belong to multiple workspaces and switch between them using the same account. |
+| **Users and Roles** | Each workspace member has a role defining their permissions. Admins can manage documents and workspace resources, while members can search documents and ask questions. A user may have different roles across different workspaces. |
+| **Invitations** | Workspace Admins can invite users and assign their role. Invitations can be accepted by new or existing NexusVault users, are single-use, and expire automatically. |
+| **Document Versioning** | Revised documents can be uploaded without losing previous versions. The existing version remains available and searchable until the new version has been fully processed and verified. Previous versions remain accessible for historical reference. |
 
-### Semantic Search
-Ask a question in your own words and NexusVault finds the relevant passage even if it doesn't share your exact vocabulary — understanding what you mean, not just matching what you typed.
+## Core Platform Principles
 
-### Keyword Search
-Precise, exact-term search for the cases meaning-based search isn't built for — error codes, identifiers, exact phrases.
+NexusVault is designed around the following principles:
 
-### Hybrid Search
-Combines semantic and keyword search together, since different questions need different kinds of search, and the best results often come from blending both.
+- **Meaning-based retrieval:** Documents are searched by semantic meaning, not only exact keywords.
+- **Grounded answers:** Responses are based on the organization's own knowledge rather than unsupported model guesses.
+- **Traceability:** Answers can be linked back to the original document and source location.
+- **Tenant isolation:** Each organization's data remains isolated within its workspace.
+- **Flexible access control:** Users can belong to multiple workspaces and have different roles in each one.
+- **Reliable document updates:** New document versions are processed safely without temporarily removing the previous searchable version.
+- **Production-style retrieval:** Hybrid search and reranking improve the quality and relevance of retrieved information.
 
-### Relevance Reranking
-After finding the most likely matches, a second, more careful pass re-examines the strongest candidates to make sure the best answer actually rises to the top — the same two-stage "find candidates, then double-check" approach used by real production search systems.
+## Summary
 
-### Grounded Question-Answering
-Ask a direct question and get a natural-language answer — grounded entirely in the organization's own documents, with every claim traceable back to the exact source document, page, and section it came from. If the answer isn't in the documents, it says so honestly instead of guessing.
+NexusVault is a private, multi-tenant platform that transforms organizational documents into a searchable knowledge system. It supports document ingestion, semantic and keyword search, hybrid retrieval, reranking, grounded question-answering with citations, workspace isolation, role-based access, invitations, and document versioning.
 
-### Workspaces
-Every organization gets its own private workspace, with complete data isolation between them — one company can never see another's documents, under any circumstance. A single person can belong to more than one workspace at once, just like real tools such as Slack or Notion — create your own workspace, join someone else's, and switch between them without needing separate accounts.
-
-### Users & Roles
-Every workspace member has a role that determines what they can do — Admins can upload, manage, and organize documents, while every member can search and ask questions. Someone can hold different roles in different workspaces at the same time — an Admin of their own team's workspace, but just a member of another team's.
-
-### Invitations
-Admins bring new people into a workspace by sending them an invitation. The invitee accepts it using their own account — whether they're brand new to NexusVault or already have an account elsewhere — and joins with exactly the role the Admin assigned them. Invitations are single-use and expire automatically, so access stays deliberate and controlled.
-
-### Document Versioning
-Uploading a revised version of a document doesn't lose history — the old version stays available and searchable right up until the new version is fully processed and verified, so the document never "disappears," and past versions remain accessible for reference even after being superseded.
+The platform allows organizations to retrieve information based on meaning, ask questions in natural language, and receive answers that remain grounded in their own documents while maintaining security, access control, and separation between organizations.
