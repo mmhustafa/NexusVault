@@ -507,12 +507,6 @@ Invitations expire after 7 days. The `rawToken` is stored as a SHA-256 hash and 
 }
 ```
 
-> The invitee calls `POST /api/auth/accept-invitation` with the `rawToken`. Their account email must match the `email` specified here.
-
----
-
----
-
 ## AI Service Integration
 
 The backend communicates with the external FastAPI AI service via dedicated typed HTTP clients configured in `NexusVault.Infrastructure.AiService`. The endpoints consumed by the backend are:
