@@ -22,9 +22,9 @@ namespace NexusVault.Infrastructure.Persistence.Repositories
             Guid tenantId,
             int topK,
             Guid? documentId = null,
+            bool includeArchived = false,
             CancellationToken ct = default)
         {
-            
             var pgVector = new Vector(queryVector);
 
             var rows = await _db.Database.SqlQuery<ChunkSearchRow>($"""
@@ -42,10 +42,10 @@ namespace NexusVault.Infrastructure.Persistence.Repositories
             JOIN "documents" d ON d."Id" = dv."DocumentId"
             WHERE c."TenantId" = {tenantId}
               AND ({documentId}::uuid IS NULL OR dv."DocumentId" = {documentId}::uuid)
+              AND ({includeArchived} = true OR dv."IsCurrent" = true)
             ORDER BY e."Vector" <=> {pgVector}
             LIMIT {topK}
             """).ToListAsync(ct);
-
 
             return rows
                 .Select(r => new ChunkSearchResult(
@@ -64,6 +64,7 @@ namespace NexusVault.Infrastructure.Persistence.Repositories
             Guid tenantId,
             int topK,
             Guid? documentId = null,
+            bool includeArchived = false,
             CancellationToken ct = default)
         {
             var rows = await _db.Database.SqlQuery<ChunkFullTextSearchRow>($"""
@@ -80,6 +81,7 @@ namespace NexusVault.Infrastructure.Persistence.Repositories
             JOIN "documents" d ON d."Id" = dv."DocumentId"
             WHERE c."TenantId" = {tenantId}
               AND ({documentId}::uuid IS NULL OR dv."DocumentId" = {documentId}::uuid)
+              AND ({includeArchived} = true OR dv."IsCurrent" = true)
               AND c.search_vector @@ plainto_tsquery('english', {queryText})
             ORDER BY ts_rank_cd(c.search_vector, plainto_tsquery('english', {queryText})) DESC
             LIMIT {topK}

@@ -17,6 +17,10 @@ namespace NexusVault.Application.Interfaces
         /// exists, the caller should not create a new version or re-enqueue processing.</summary>
         Task<DocumentVersion?> FindByContentHashAsync(Guid documentId, string contentHash, CancellationToken ct = default);
 
+        Task<int> GetNextVersionNumberAsync(Guid documentId, CancellationToken ct = default);
+
+        Task<IReadOnlyList<DocumentVersion>> GetVersionsForDocumentAsync(Guid documentId, CancellationToken ct = default);
+
         Task AddDocumentAsync(Domain.Entities.Document document, CancellationToken ct = default);
 
         Task AddVersionAsync(DocumentVersion version, CancellationToken ct = default);

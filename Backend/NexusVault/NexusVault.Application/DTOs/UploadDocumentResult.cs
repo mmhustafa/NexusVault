@@ -19,4 +19,13 @@ namespace NexusVault.Application.DTOs
         DateTimeOffset CreatedAt,
         DateTimeOffset? ReadyAt
     );
+
+    public record DocumentVersionSummaryDto(
+        Guid VersionId,
+        int VersionNumber,
+        bool IsCurrent,
+        string Status,
+        DateTimeOffset CreatedAt,
+        DateTimeOffset? ReadyAt
+);
 }

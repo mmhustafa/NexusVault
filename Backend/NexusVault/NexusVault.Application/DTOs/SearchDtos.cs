@@ -23,7 +23,8 @@ namespace NexusVault.Application.DTOs
         Guid? DocumentId = null,
         SearchMode Mode = SearchMode.Dense,
         FusionStrategy Fusion = FusionStrategy.Rrf,
-        bool Rerank = false
+        bool Rerank = false,
+        bool IncludeArchived = false
     );
 
     public record SearchResultDto(

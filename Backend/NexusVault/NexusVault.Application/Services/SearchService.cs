@@ -38,6 +38,7 @@ namespace NexusVault.Application.Services
             SearchMode mode = SearchMode.Dense,
             FusionStrategy fusion = FusionStrategy.Rrf,
             bool rerank = false,
+            bool includeArchived = false,
             CancellationToken ct = default)
         {
 
@@ -53,9 +54,9 @@ namespace NexusVault.Application.Services
 
             var candidates = mode switch
             {
-                SearchMode.Sparse => await SearchSparseAsync(query, tenantId, retrievalPoolSize, documentId, ct),
-                SearchMode.Hybrid => await SearchHybridAsync(query, tenantId, retrievalPoolSize, documentId, fusion, ct),
-                _ => await SearchDenseAsync(query, tenantId, retrievalPoolSize, documentId, ct)
+                SearchMode.Sparse => await SearchSparseAsync(query, tenantId, retrievalPoolSize, documentId, includeArchived, ct),
+                SearchMode.Hybrid => await SearchHybridAsync(query, tenantId, retrievalPoolSize, documentId, fusion, includeArchived, ct),
+                _ => await SearchDenseAsync(query, tenantId, retrievalPoolSize, documentId,includeArchived, ct)
             };
 
             retrievalStopwatch.Stop();
@@ -94,11 +95,11 @@ namespace NexusVault.Application.Services
                 .ToList();
         }
         private async Task<IReadOnlyList<SearchResultDto>> SearchDenseAsync(
-            string query, Guid tenantId, int topK, Guid? documentId, CancellationToken ct)
+            string query, Guid tenantId, int topK, Guid? documentId, bool includeArchived, CancellationToken ct)
         {
 
             var queryVector = await EmbedQueryAsync(query, ct);
-            var rows = await _searchRepository.FindNearestAsync(queryVector, tenantId, topK, documentId, ct);
+            var rows = await _searchRepository.FindNearestAsync(queryVector, tenantId, topK, documentId,includeArchived, ct);
 
             return rows
                 .Select(r => new SearchResultDto(
@@ -108,10 +109,10 @@ namespace NexusVault.Application.Services
         }
 
         private async Task<IReadOnlyList<SearchResultDto>> SearchSparseAsync(
-            string query, Guid tenantId, int topK, Guid? documentId, CancellationToken ct)
+            string query, Guid tenantId, int topK, Guid? documentId, bool includeArchived, CancellationToken ct)
         {
 
-            var rows = await _searchRepository.FindByFullTextAsync(query, tenantId, topK, documentId, ct);
+            var rows = await _searchRepository.FindByFullTextAsync(query, tenantId, topK, documentId, includeArchived, ct);
 
             return rows
                 .Select(r => new SearchResultDto(
@@ -121,14 +122,14 @@ namespace NexusVault.Application.Services
         }
 
         private async Task<IReadOnlyList<SearchResultDto>> SearchHybridAsync(
-            string query, Guid tenantId, int topK, Guid? documentId, FusionStrategy fusion, CancellationToken ct)
+            string query, Guid tenantId, int topK, Guid? documentId, FusionStrategy fusion, bool includeArchived, CancellationToken ct)
         {
             var candidatePoolSize = Math.Max(topK * 3, 20);
 
             var queryVector = await EmbedQueryAsync(query, ct);
 
-            var denseResults = await _searchRepository.FindNearestAsync(queryVector, tenantId, candidatePoolSize, documentId, ct);
-            var sparseResults = await _searchRepository.FindByFullTextAsync(query, tenantId, candidatePoolSize, documentId, ct);
+            var denseResults = await _searchRepository.FindNearestAsync(queryVector, tenantId, candidatePoolSize, documentId, includeArchived, ct);
+            var sparseResults = await _searchRepository.FindByFullTextAsync(query, tenantId, candidatePoolSize, documentId, includeArchived, ct);
             
 
             return fusion == FusionStrategy.WeightedSum
@@ -143,9 +144,9 @@ namespace NexusVault.Application.Services
         }
 
         private static List<SearchResultDto> FuseWithRrf(
-            IReadOnlyList<ChunkSearchResult> denseResults,
-            IReadOnlyList<ChunkFullTextResult> sparseResults,
-            int topK)
+           IReadOnlyList<ChunkSearchResult> denseResults,
+           IReadOnlyList<ChunkFullTextResult> sparseResults,
+           int topK)
         {
             var scores = new Dictionary<Guid, double>();
             var metadata = new Dictionary<Guid, ChunkMetadata>();
@@ -205,7 +206,7 @@ namespace NexusVault.Application.Services
             var max = raw.Values.Max();
 
             if (Math.Abs(max - min) < 1e-9)
-                return raw.ToDictionary(kv => kv.Key, _ => 1.0); 
+                return raw.ToDictionary(kv => kv.Key, _ => 1.0);
 
             return raw.ToDictionary(kv => kv.Key, kv => (kv.Value - min) / (max - min));
         }

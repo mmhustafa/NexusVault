@@ -1,5 +1,6 @@
 ﻿using Hangfire;
 using Microsoft.Extensions.Logging;
+using Microsoft.EntityFrameworkCore;
 using NexusVault.Application.Interfaces;
 using NexusVault.Application.Services;
 using NexusVault.Domain.Entities;
@@ -155,6 +156,28 @@ namespace NexusVault.Infrastructure.Jobs
                 version.Status = DocumentVersionStatus.Ready;
                 version.ReadyAt = DateTimeOffset.UtcNow;
                 version.ErrorMessage = null;
+
+                // Step 6: Archival swap
+                if (!version.IsCurrent)
+                {
+                    var previouslyCurrent = await _db.DocumentVersions
+                        .Where(v => v.DocumentId == version.DocumentId && v.IsCurrent && v.Id != version.Id)
+                        .ToListAsync(ct);
+
+                    foreach (var old in previouslyCurrent)
+                        old.IsCurrent = false;
+
+                    version.IsCurrent = true;
+
+                    var document = await _db.Documents.FindAsync(new object?[] { version.DocumentId }, ct);
+                    if (document is not null)
+                        document.CurrentVersionId = version.Id;
+
+                    _logger.LogInformation(
+                        "DocumentVersion {VersionId} activated as current; archived {ArchivedCount} previous version(s)",
+                        documentVersionId, previouslyCurrent.Count);
+                }
+
                 await _db.SaveChangesAsync(ct);
 
                 _logger.LogInformation("DocumentVersion {VersionId} fully processed: {ChunkCount} chunks indexed",

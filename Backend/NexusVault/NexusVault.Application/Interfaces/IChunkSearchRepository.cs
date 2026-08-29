@@ -12,6 +12,7 @@ namespace NexusVault.Application.Interfaces
             Guid tenantId,
             int topK,
             Guid? documentId = null,
+            bool includeArchived = false,
             CancellationToken ct = default);
 
         Task<IReadOnlyList<ChunkFullTextResult>> FindByFullTextAsync(
@@ -19,6 +20,7 @@ namespace NexusVault.Application.Interfaces
             Guid tenantId,
             int topK,
             Guid? documentId = null,
+            bool includeArchived = false,
             CancellationToken ct = default);
     }
 

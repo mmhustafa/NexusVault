@@ -26,6 +26,21 @@ namespace NexusVault.Infrastructure.Persistence.Repositories
             _db.DocumentVersions.FirstOrDefaultAsync(
                 v => v.DocumentId == documentId && v.ContentHash == contentHash, ct);
 
+        public async Task<int> GetNextVersionNumberAsync(Guid documentId, CancellationToken ct = default)
+        {
+            var maxVersion = await _db.DocumentVersions
+                .Where(v => v.DocumentId == documentId)
+                .Select(v => (int?)v.VersionNumber)
+                .MaxAsync(ct);
+            return (maxVersion ?? 0) + 1;
+        }
+
+        public async Task<IReadOnlyList<DocumentVersion>> GetVersionsForDocumentAsync(Guid documentId, CancellationToken ct = default) =>
+            await _db.DocumentVersions
+           .Where(v => v.DocumentId == documentId)
+           .OrderByDescending(v => v.VersionNumber)
+           .ToListAsync(ct);
+
         public async Task AddDocumentAsync(Document document, CancellationToken ct = default) =>
             await _db.Documents.AddAsync(document, ct);
 

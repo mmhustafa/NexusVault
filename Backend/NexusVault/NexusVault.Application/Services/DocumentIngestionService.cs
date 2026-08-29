@@ -61,17 +61,13 @@ namespace NexusVault.Application.Services
             };
 
             var existing = await _repository.FindByContentHashAsync(document.Id, contentHash, ct);
-            // Note: for a brand-new Document this will always be null (no prior
-            // versions exist yet) -- the real duplicate-detection value of this
-            // check shows up once Phase 9 adds "new version of an existing
-            // document" as an explicit operation. Kept here now so the pattern
-            // and the repository method exist before they're load-bearing.
 
-            var storagePath = await _fileStorage.SaveAsync(document.Id, originalFileName, fileStream, ct);
+            var versionId = Guid.NewGuid();
+            var storagePath = await _fileStorage.SaveAsync(versionId, originalFileName, fileStream, ct);
 
             var version = new DocumentVersion
             {
-                Id = Guid.NewGuid(),
+                Id = versionId,
                 DocumentId = document.Id,
                 TenantId = tenantId,
                 VersionNumber = 1,
@@ -97,6 +93,83 @@ namespace NexusVault.Application.Services
 
             return new UploadDocumentResult(document.Id, version.Id, version.Status.ToString(), WasDuplicate: false);
         }
+
+        public async Task<UploadDocumentResult> UploadNewVersionAsync(
+           Guid documentId,
+           Guid tenantId,
+           string originalFileName,
+           string contentType,
+           long fileSizeBytes,
+           Stream fileStream,
+           CancellationToken ct = default)
+        {
+            var document = await _repository.GetDocumentAsync(documentId, ct);
+
+            if (document is null || document.TenantId != tenantId)
+                throw new InvalidOperationException("Document not found.");
+
+            if (!AllowedContentTypes.Contains(contentType))
+                throw new InvalidOperationException($"Unsupported content type '{contentType}'. Allowed: PDF, DOCX.");
+
+            if (fileSizeBytes <= 0 || fileSizeBytes > MaxFileSizeBytes)
+                throw new InvalidOperationException($"File size must be between 1 byte and {MaxFileSizeBytes} bytes.");
+
+            var contentHash = await ContentHasher.ComputeSha256Async(fileStream, ct);
+
+            var existingWithSameHash = await _repository.FindByContentHashAsync(documentId, contentHash, ct);
+            if (existingWithSameHash is not null)
+            {
+                // Identical content already uploaded for this document --
+                // idempotent no-op, don't create a duplicate version or
+                // re-enqueue processing.
+                return new UploadDocumentResult(
+                    documentId, existingWithSameHash.Id, existingWithSameHash.Status.ToString(), WasDuplicate: true);
+            }
+
+            var nextVersionNumber = await _repository.GetNextVersionNumberAsync(documentId, ct);
+
+            var versionId = Guid.NewGuid();
+            var storagePath = await _fileStorage.SaveAsync(versionId, originalFileName, fileStream, ct);
+
+            var version = new DocumentVersion
+            {
+                Id = versionId,
+                DocumentId = documentId,
+                TenantId = tenantId,
+                VersionNumber = nextVersionNumber,
+                IsCurrent = false, // stays false until ProcessDocumentVersionJob's swap on success
+                OriginalFileName = originalFileName,
+                ContentType = contentType,
+                FileSizeBytes = fileSizeBytes,
+                StoragePath = storagePath,
+                ContentHash = contentHash,
+                Status = DocumentVersionStatus.Pending,
+                AttemptCount = 0,
+                CreatedAt = DateTimeOffset.UtcNow
+            };
+
+            await _repository.AddVersionAsync(version, ct);
+            await _repository.SaveChangesAsync(ct);
+
+            var correlationId = Guid.NewGuid().ToString("N");
+            _jobScheduler.EnqueueProcessDocumentVersion(version.Id, correlationId);
+
+            return new UploadDocumentResult(documentId, version.Id, version.Status.ToString(), WasDuplicate: false);
+        }
+
+        public async Task<IReadOnlyList<DocumentVersionSummaryDto>?> GetVersionHistoryAsync(
+            Guid documentId, Guid tenantId, CancellationToken ct = default)
+        {
+            var document = await _repository.GetDocumentAsync(documentId, ct);
+            if (document is null || document.TenantId != tenantId) return null;
+
+            var versions = await _repository.GetVersionsForDocumentAsync(documentId, ct);
+
+            return versions
+                .Select(v => new DocumentVersionSummaryDto(v.Id, v.VersionNumber, v.IsCurrent, v.Status.ToString(), v.CreatedAt, v.ReadyAt))
+                .ToList();
+        }
+
         public async Task<DocumentVersionStatusResult?> GetStatusAsync(Guid documentVersionId,Guid tenantId, CancellationToken ct = default)
         {
             var version = await _repository.GetVersionAsync(documentVersionId, ct);
