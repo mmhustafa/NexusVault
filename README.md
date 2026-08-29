@@ -2,6 +2,9 @@
 
 **A private, multi-tenant semantic search and RAG platform for organizational knowledge.**
 
+- [Backend Documentation ](Backend/README.md)
+- [AI Service Documentation  ](Ai-Service/README.md)
+
 ## Overview
 
 Organizations accumulate large volumes of internal documentation such as policies, technical references, reports, and manuals. Traditional keyword search often fails when a user's query does not use the same wording as the document.
