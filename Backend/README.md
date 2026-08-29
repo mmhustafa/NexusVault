@@ -99,7 +99,6 @@ All routes are prefixed with `/api`.
 | Tenant-scoped | JWT with a `tenant_id` claim required |
 | Admin | Tenant-scoped JWT + `Admin` role |
 
----
 
 ---
 
@@ -116,7 +115,7 @@ Handles user registration, login, workspace management, and token lifecycle. No 
 | POST | `/accept-invitation` | Authenticated | Join an existing tenant via an invitation token |
 | POST | `/refresh` | Anonymous | Rotate an access + refresh token pair |
 
----
+
 
 ### POST `/api/auth/register`
 
@@ -137,7 +136,7 @@ New users have no tenant yet, so the response always requires tenant selection:
 }
 ```
 
----
+
 
 ### POST `/api/auth/login`
 
@@ -172,7 +171,6 @@ New users have no tenant yet, so the response always requires tenant selection:
 }
 ```
 
----
 
 ### POST `/api/auth/select-tenant`
 
@@ -190,7 +188,6 @@ New users have no tenant yet, so the response always requires tenant selection:
 }
 ```
 
----
 
 ### POST `/api/auth/create-workspace`
 
@@ -208,7 +205,6 @@ New users have no tenant yet, so the response always requires tenant selection:
 }
 ```
 
----
 
 ### POST `/api/auth/accept-invitation`
 
@@ -228,7 +224,6 @@ The authenticated user's email must match the invitation's target email.
 }
 ```
 
----
 
 ### POST `/api/auth/refresh`
 
@@ -248,7 +243,6 @@ The old refresh token is revoked immediately upon rotation.
 }
 ```
 
----
 
 ---
 
@@ -263,7 +257,7 @@ Manages document uploads and ingestion status. All endpoints require a **Tenant-
 | POST | `/{documentId}/versions` | Admin | Upload a new version of an existing document |
 | GET | `/{documentId}/versions` | Tenant-scoped | List full version history for a document |
 
----
+
 
 ### POST `/api/documents`
 
@@ -286,7 +280,6 @@ Accepts `multipart/form-data`. Supported types: PDF, DOCX. Max size: 25 MB.
 }
 ```
 
----
 
 ### GET `/api/documents/{documentVersionId}/status`
 
@@ -306,7 +299,6 @@ Accepts `multipart/form-data`. Supported types: PDF, DOCX. Max size: 25 MB.
 
 **Response `404 Not Found`** — version does not exist or belongs to a different tenant.
 
----
 
 ### POST `/api/documents/{documentId}/versions`
 
@@ -341,7 +333,7 @@ Idempotent — uploading identical content returns the existing version without 
 
 **Response `404 Not Found`** — document does not exist or belongs to a different tenant.
 
----
+
 
 ### GET `/api/documents/{documentId}/versions`
 
@@ -369,7 +361,6 @@ Idempotent — uploading identical content returns the existing version without 
 
 **Response `404 Not Found`** — document does not exist or belongs to a different tenant.
 
----
 
 ---
 
@@ -381,7 +372,7 @@ Searches tenant documents using dense (vector), sparse (full-text), or hybrid re
 |--------|-------|------|-------------|
 | POST | `/` | Tenant-scoped | Search tenant documents |
 
----
+
 
 ### POST `/api/search`
 
@@ -423,7 +414,6 @@ Searches tenant documents using dense (vector), sparse (full-text), or hybrid re
 ]
 ```
 
----
 
 ---
 
@@ -435,7 +425,7 @@ Answers natural-language questions using RAG over tenant documents. Requires a *
 |--------|-------|------|-------------|
 | POST | `/` | Tenant-scoped | Answer a question using RAG |
 
----
+
 
 ### POST `/api/ask`
 
@@ -472,8 +462,6 @@ Internally runs **Hybrid search + rerank** (`topK = 5`), then calls `/rag-synthe
 
 ---
 
----
-
 ## InvitationsController — `/api/invitations`
 
 Creates workspace invitations. Requires a **Tenant-scoped** JWT with the **Admin** role.
@@ -482,7 +470,7 @@ Creates workspace invitations. Requires a **Tenant-scoped** JWT with the **Admin
 |--------|-------|------|-------------|
 | POST | `/` | Admin | Create an invitation to join the current tenant |
 
----
+
 
 ### POST `/api/invitations`
 
@@ -506,6 +494,7 @@ Invitations expire after 7 days. The `rawToken` is stored as a SHA-256 hash and 
   "expiresAt": "2026-09-05T22:00:00Z"
 }
 ```
+---
 
 ## AI Service Integration
 
@@ -518,7 +507,6 @@ The backend communicates with the external FastAPI AI service via dedicated type
 | `HttpRerankingService` | `POST /rerank` | `SearchService` & `AskService`: re-scores candidate chunks with cross-encoder |
 | `HttpRagSynthesisService` | `POST /rag-synthesize` | `AskService`: produces grounded QA answers citing context chunks |
 
----
 
 ---
 
