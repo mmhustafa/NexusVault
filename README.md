@@ -28,6 +28,20 @@ NexusVault solves this by indexing documents based on meaning rather than keywor
 | **Invitations** | Workspace Admins can invite users and assign their role. Invitations can be accepted by new or existing NexusVault users, are single-use, and expire automatically. |
 | **Document Versioning** | Revised documents can be uploaded without losing previous versions. The existing version remains available and searchable until the new version has been fully processed and verified. Previous versions remain accessible for historical reference. |
 
+## Tech Stack
+
+| Component | Technology |
+|---|---|
+| **Backend API** | ASP.NET Core (.NET 10) |
+| **Database & Vector Store** | PostgreSQL + pgvector |
+| **ORM & Data Access** | Entity Framework Core (EF Core) |
+| **Identity & Security** | ASP.NET Core Identity & JWT |
+| **Background Jobs** | Hangfire (PostgreSQL storage) |
+| **Document Parsing** | PdfPig & DocumentFormat.OpenXml |
+| **AI Microservice** | Python & FastAPI |
+| **Embedding & Reranking** | Sentence-Transformers (`all-mpnet-base-v2`, Cross-Encoder) |
+| **LLM Synthesis** | Groq API (`openai/gpt-oss-120b`) |
+
 ## Core Platform Principles
 
 NexusVault is designed around the following principles:
